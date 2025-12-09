@@ -104,11 +104,13 @@ class STMDataPublisher : public rclcpp::Node
         desc.description = "Serial baudrate. Needs to allign with device baudrate";
         range.from_value = MIN_BAUDRATE;
         range.to_value   = MAX_BAUDRATE;
-        this->declare_parameter<int>("baudrate", 115200, desc);
-
         desc.integer_range.push_back(range);
+        this->declare_parameter<int>("baudrate", 115200, desc);
+        desc.integer_range.pop_back();
+
         range.from_value = MIN_BUFFER_SIZE;
         range.to_value   = MAX_BUFFER_SIZE;
+        desc.integer_range.push_back(range);
         desc.description = "Message frame size";
         this->declare_parameter<int>("buffer_size", DEFAULT_BUFFER_SIZE);
 
