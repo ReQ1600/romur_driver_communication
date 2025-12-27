@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
+#include "romur_interfaces/msg/motors_pwm_control.hpp"
 
 #include <asm/termbits.h>
 #include <sys/ioctl.h>
@@ -17,6 +18,8 @@ namespace ROMUR
 
 #define MAX_BAUDRATE 250000
 #define MIN_BAUDRATE 300
+
+#define MSG_SIZE 8  // must be the same as message size defined inside the stm!
 
 std::unique_ptr<rclcpp::Logger> g_Logger;
 
@@ -117,6 +120,11 @@ class STMDataPublisher : public rclcpp::Node
         p_publisher_ =
             this->create_publisher<std_msgs::msg::UInt8MultiArray>("stm_data_publisher", 10);
 
+        p_subscriber_ = this->create_subscription<romur_interfaces::msg::MotorsPwmControl>(
+            "motor_control",
+            10,
+            std::bind(&STMDataPublisher::exchangeData, this, std::placeholders::_1));
+
         port_name_ = this->get_parameter("port").as_string();
 
         baudrate_ = this->get_parameter("baudrate").as_int();
@@ -129,8 +137,8 @@ class STMDataPublisher : public rclcpp::Node
         if (buffer_size_ < MIN_BUFFER_SIZE)
             buffer_size_ = MIN_BUFFER_SIZE;
 
-        p_timer_ = this->create_wall_timer(std::chrono::milliseconds(1),
-                                           std::bind(&STMDataPublisher::readDataFromStm, this));
+        // p_timer_ = this->create_wall_timer(std::chrono::milliseconds(1),
+        //                                    std::bind(&STMDataPublisher::exchangeData, this));
 
         g_Logger = std::make_unique<rclcpp::Logger>(this->get_logger());
 
@@ -141,13 +149,14 @@ class STMDataPublisher : public rclcpp::Node
     }
 
   private:
-    unsigned int                                                 baudrate_;
-    std::string                                                  port_name_;
-    rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr p_publisher_;
-    rclcpp::TimerBase::SharedPtr                                 p_timer_;
-    std::unique_ptr<SerialPort>                                  p_serial_port_;
-    unsigned int                                                 buffer_size_;
-    uint8_t                                                      buffer_[MAX_BUFFER_SIZE] = {0};
+    unsigned int                                                             baudrate_;
+    std::string                                                              port_name_;
+    rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr             p_publisher_;
+    rclcpp::Subscription<romur_interfaces::msg::MotorsPwmControl>::SharedPtr p_subscriber_;
+    rclcpp::TimerBase::SharedPtr                                             p_timer_;
+    std::unique_ptr<SerialPort>                                              p_serial_port_;
+    unsigned int                                                             buffer_size_;
+    uint8_t buffer_[MAX_BUFFER_SIZE] = {};
 
     void readDataFromStm()
     {
@@ -155,13 +164,45 @@ class STMDataPublisher : public rclcpp::Node
         RCLCPP_INFO(*g_Logger, "reading data");
 
         if (msgSize < 0)
-            RCLCPP_ERROR(*g_Logger, "readDataFromStm has encountered error: %s", strerror(errno));
+            RCLCPP_ERROR(*g_Logger,
+                         "Encountered error %s while reading from %s",
+                         strerror(errno),
+                         port_name_.c_str());
 
         auto msg = std_msgs::msg::UInt8MultiArray();
-        msg.data.assign(buffer_, buffer_ + buffer_size_);
+        msg.data.assign(buffer_, buffer_ + msgSize);
 
         p_publisher_->publish(msg);
     };
+
+    void writeDataToStm(const romur_interfaces::msg::MotorsPwmControl& msg)
+    {
+        uint8_t bf[MSG_SIZE] = {static_cast<uint8_t>(msg.motor0_pwm),
+                                static_cast<uint8_t>(msg.motor1_pwm),
+                                static_cast<uint8_t>(msg.motor2_pwm),
+                                static_cast<uint8_t>(msg.motor3_pwm),
+                                0x00,
+                                0x00,
+                                0x00,
+                                0x00};
+
+        int msgSize = write(p_serial_port_->getSerialPort(), bf, 8);
+        RCLCPP_INFO(*g_Logger, "writing data");
+
+        if (msgSize < 0)
+            RCLCPP_ERROR(*g_Logger,
+                         "Encountered error %s while writing to %s",
+                         strerror(errno),
+                         port_name_.c_str());
+    }
+
+    void exchangeData(const romur_interfaces::msg::MotorsPwmControl msg)
+    {
+        writeDataToStm(msg);
+        RCLCPP_INFO(*g_Logger, "writing done");
+        readDataFromStm();
+        RCLCPP_INFO(*g_Logger, "reading done");
+    }
 };
 }  // namespace ROMUR
 

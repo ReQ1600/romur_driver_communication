@@ -8,11 +8,16 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(romur_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 
 add_executable(driver_data_publisher src/driver_data_publisher.cpp)
 
-ament_target_dependencies(driver_data_publisher rclcpp std_msgs)
+ament_target_dependencies(driver_data_publisher 
+    rclcpp 
+    std_msgs
+    romur_interfaces
+)
 
 install(TARGETS
   driver_data_publisher
