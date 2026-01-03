@@ -1,6 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
-#include "romur_interfaces/msg/motors_pwm_control.hpp"
+#include "romur_interfaces/msg/romur_control.hpp"
 
 #include <asm/termbits.h>
 #include <sys/ioctl.h>
@@ -127,7 +127,7 @@ class STMDataPublisher : public rclcpp::Node
         p_publisher_ =
             this->create_publisher<std_msgs::msg::UInt8MultiArray>("driver_feedback_data", 10);
 
-        p_subscriber_ = this->create_subscription<romur_interfaces::msg::MotorsPwmControl>(
+        p_subscriber_ = this->create_subscription<romur_interfaces::msg::ROMURControl>(
             "motor_control",
             10,
             std::bind(&STMDataPublisher::exchangeData, this, std::placeholders::_1));
@@ -158,14 +158,14 @@ class STMDataPublisher : public rclcpp::Node
     }
 
   private:
-    unsigned int                                                             baudrate_;
-    std::string                                                              port_name_;
-    rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr             p_publisher_;
-    rclcpp::Subscription<romur_interfaces::msg::MotorsPwmControl>::SharedPtr p_subscriber_;
-    rclcpp::TimerBase::SharedPtr                                             p_timer_;
-    std::unique_ptr<SerialPort>                                              p_serial_port_;
-    unsigned int                                                             buffer_size_;
-    std::vector<uint8_t>                                                     buffer_;
+    unsigned int                                                         baudrate_;
+    std::string                                                          port_name_;
+    rclcpp::Publisher<std_msgs::msg::UInt8MultiArray>::SharedPtr         p_publisher_;
+    rclcpp::Subscription<romur_interfaces::msg::ROMURControl>::SharedPtr p_subscriber_;
+    rclcpp::TimerBase::SharedPtr                                         p_timer_;
+    std::unique_ptr<SerialPort>                                          p_serial_port_;
+    unsigned int                                                         buffer_size_;
+    std::vector<uint8_t>                                                 buffer_;
 
     void readDataFromStm()
     {
@@ -204,13 +204,13 @@ class STMDataPublisher : public rclcpp::Node
         }
     };
 
-    void writeDataToStm(const romur_interfaces::msg::MotorsPwmControl& msg)
+    void writeDataToStm(const romur_interfaces::msg::ROMURControl& msg)
     {
-        uint8_t bf[MSG_SIZE] = {static_cast<uint8_t>(msg.motor0_pwm),
-                                static_cast<uint8_t>(msg.motor1_pwm),
-                                static_cast<uint8_t>(msg.motor2_pwm),
-                                static_cast<uint8_t>(msg.motor3_pwm),
-                                0x00,
+        uint8_t bf[MSG_SIZE] = {static_cast<uint8_t>(msg.motors.motor0_pwm),
+                                static_cast<uint8_t>(msg.motors.motor1_pwm),
+                                static_cast<uint8_t>(msg.motors.motor2_pwm),
+                                static_cast<uint8_t>(msg.motors.motor3_pwm),
+                                static_cast<uint8_t>(msg.light.status),
                                 0x00,
                                 0x00,
                                 0x00};
@@ -225,7 +225,7 @@ class STMDataPublisher : public rclcpp::Node
                          port_name_.c_str());
     }
 
-    void exchangeData(const romur_interfaces::msg::MotorsPwmControl msg)
+    void exchangeData(const romur_interfaces::msg::ROMURControl msg)
     {
         writeDataToStm(msg);
         RCLCPP_INFO(*g_Logger, "writing done");
