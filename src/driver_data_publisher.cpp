@@ -8,13 +8,14 @@
 #include <iostream>
 #include <fcntl.h>
 #include <unistd.h>
+#include <poll.h>
 
 namespace ROMUR
 {
 #define MAX_BUFFER_SIZE 512
 
-#define MIN_BUFFER_SIZE     32
-#define DEFAULT_BUFFER_SIZE 128
+#define MIN_BUFFER_SIZE     8
+#define DEFAULT_BUFFER_SIZE 11
 
 #define MAX_BAUDRATE 250000
 #define MIN_BAUDRATE 300
@@ -26,8 +27,13 @@ std::unique_ptr<rclcpp::Logger> g_Logger;
 class SerialPort
 {
   public:
-    SerialPort(const std::string& port_name, const unsigned int& baudrate)
-        : serial_port_(open(port_name.c_str(), O_RDWR)), baudrate_(baudrate) {};
+    SerialPort(const std::string&  port_name,
+               const unsigned int& baudrate,
+               const unsigned int& read_size)
+        : serial_port_(open(port_name.c_str(), O_RDWR)),
+          baudrate_(baudrate),
+          read_size_(read_size) {};
+
     ~SerialPort()
     {
         close(serial_port_);
@@ -53,7 +59,7 @@ class SerialPort
         tty.c_cflag &= ~CRTSCTS;
         tty.c_cflag |= CREAD | CLOCAL;
 
-        tty.c_lflag |= ICANON;
+        tty.c_lflag &= ~ICANON;
         tty.c_lflag &= ~ECHO;
         tty.c_lflag &= ~ECHOE;
         tty.c_lflag &= ~ECHONL;
@@ -66,7 +72,7 @@ class SerialPort
 
         // wait time
         tty.c_cc[VTIME] = 10;
-        tty.c_cc[VMIN]  = 0;
+        tty.c_cc[VMIN]  = read_size_;
 
         // for custom baudrate
         tty.c_cflag &= ~CBAUD;
@@ -91,6 +97,7 @@ class SerialPort
   private:
     const int          serial_port_;
     const unsigned int baudrate_;
+    const unsigned int read_size_;
 };
 
 class STMDataPublisher : public rclcpp::Node
@@ -118,7 +125,7 @@ class STMDataPublisher : public rclcpp::Node
         this->declare_parameter<int>("buffer_size", DEFAULT_BUFFER_SIZE);
 
         p_publisher_ =
-            this->create_publisher<std_msgs::msg::UInt8MultiArray>("stm_data_publisher", 10);
+            this->create_publisher<std_msgs::msg::UInt8MultiArray>("driver_feedback_data", 10);
 
         p_subscriber_ = this->create_subscription<romur_interfaces::msg::MotorsPwmControl>(
             "motor_control",
@@ -137,13 +144,15 @@ class STMDataPublisher : public rclcpp::Node
         if (buffer_size_ < MIN_BUFFER_SIZE)
             buffer_size_ = MIN_BUFFER_SIZE;
 
+        buffer_.resize(buffer_size_);
+
         // p_timer_ = this->create_wall_timer(std::chrono::milliseconds(1),
         //                                    std::bind(&STMDataPublisher::exchangeData, this));
 
         g_Logger = std::make_unique<rclcpp::Logger>(this->get_logger());
 
         // serial port as uniqueptr so it always closes socket on exit
-        p_serial_port_ = std::make_unique<SerialPort>(port_name_, baudrate_);
+        p_serial_port_ = std::make_unique<SerialPort>(port_name_, baudrate_, buffer_size_);
         if (!p_serial_port_->Setup())
             exit(0);
     }
@@ -156,11 +165,28 @@ class STMDataPublisher : public rclcpp::Node
     rclcpp::TimerBase::SharedPtr                                             p_timer_;
     std::unique_ptr<SerialPort>                                              p_serial_port_;
     unsigned int                                                             buffer_size_;
-    uint8_t buffer_[MAX_BUFFER_SIZE] = {};
+    std::vector<uint8_t>                                                     buffer_;
 
     void readDataFromStm()
     {
-        int msgSize = read(p_serial_port_->getSerialPort(), buffer_, sizeof(buffer_));
+        pollfd pfd;
+        pfd.fd     = p_serial_port_->getSerialPort();
+        pfd.events = POLLIN;
+
+        int ret = poll(&pfd, 1, 200);
+
+        if (ret == 0)
+        {
+            RCLCPP_WARN(*g_Logger, "Serial read timeout");
+            return;
+        }
+        else if (ret < 0)
+        {
+            RCLCPP_ERROR(*g_Logger, "Poll error: %s", strerror(errno));
+            return;
+        }
+
+        int msgSize = read(pfd.fd, buffer_.data(), buffer_size_);
         RCLCPP_INFO(*g_Logger, "reading data");
 
         if (msgSize < 0)
@@ -169,10 +195,13 @@ class STMDataPublisher : public rclcpp::Node
                          strerror(errno),
                          port_name_.c_str());
 
-        auto msg = std_msgs::msg::UInt8MultiArray();
-        msg.data.assign(buffer_, buffer_ + msgSize);
+        else if (msgSize == buffer_size_)
+        {
+            auto msg = std_msgs::msg::UInt8MultiArray();
+            msg.data.assign(buffer_.data(), buffer_.data() + msgSize);
 
-        p_publisher_->publish(msg);
+            p_publisher_->publish(msg);
+        }
     };
 
     void writeDataToStm(const romur_interfaces::msg::MotorsPwmControl& msg)
