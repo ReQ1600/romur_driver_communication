@@ -128,7 +128,7 @@ class STMDataPublisher : public rclcpp::Node
             this->create_publisher<std_msgs::msg::UInt8MultiArray>("driver_feedback_data", 10);
 
         p_subscriber_ = this->create_subscription<romur_interfaces::msg::ROMURControl>(
-            "motor_control",
+            "romur_control",
             10,
             std::bind(&STMDataPublisher::exchangeData, this, std::placeholders::_1));
 
