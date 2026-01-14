@@ -11,7 +11,16 @@ find_package(rclcpp REQUIRED)
 find_package(romur_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 
-add_executable(driver_data_publisher src/driver_data_publisher.cpp)
+add_executable(driver_data_publisher 
+    src/driver_data_publisher_node.cpp
+    src/driver_data_publisher.cpp
+    src/serial_port.cpp
+)
+
+target_include_directories(driver_data_publisher
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
 ament_target_dependencies(driver_data_publisher 
     rclcpp 
