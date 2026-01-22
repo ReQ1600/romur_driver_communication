@@ -17,14 +17,13 @@
 namespace ROMUR
 {
 #define MAX_BUFFER_SIZE 512
+#define MIN_BUFFER_SIZE 8
 
-#define MIN_BUFFER_SIZE     8
-#define DEFAULT_BUFFER_SIZE 11
+#define FEEDBACK_FRAME_BYTE_SIZE 11  // must be the same as message size defined on the stm!
+#define RX_MSG_SIZE              8   // must be the same as message size defined on the stm!
 
 #define MAX_BAUDRATE 250000
 #define MIN_BAUDRATE 300
-
-#define MSG_SIZE 8  // must be the same as message size defined inside the stm!
 
 class STMDataPublisher : public rclcpp::Node
 {

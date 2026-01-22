@@ -23,8 +23,8 @@ ROMUR::STMDataPublisher::STMDataPublisher() : Node("stm_data_publisher")
     range.from_value = MIN_BUFFER_SIZE;
     range.to_value   = MAX_BUFFER_SIZE;
     desc.integer_range.push_back(range);
-    desc.description = "Message frame size";
-    this->declare_parameter<int>("buffer_size", DEFAULT_BUFFER_SIZE);
+    desc.description = "Feedback message frame size";
+    this->declare_parameter<int>("buffer_size", FEEDBACK_FRAME_BYTE_SIZE);
 
     p_publisher_ =
         this->create_publisher<std_msgs::msg::UInt8MultiArray>("driver_feedback_data", 10);
@@ -94,14 +94,14 @@ void ROMUR::STMDataPublisher::readDataFromStm()
 
 void ROMUR::STMDataPublisher::writeDataToStm(const romur_interfaces::msg::ROMURControl& msg)
 {
-    uint8_t bf[MSG_SIZE] = {static_cast<uint8_t>(msg.motors.motor0_pwm),
-                            static_cast<uint8_t>(msg.motors.motor1_pwm),
-                            static_cast<uint8_t>(msg.motors.motor2_pwm),
-                            static_cast<uint8_t>(msg.motors.motor3_pwm),
-                            static_cast<uint8_t>(msg.light.status),
-                            0x00,
-                            0x00,
-                            0x00};
+    uint8_t bf[RX_MSG_SIZE] = {static_cast<uint8_t>(msg.motors.motor0_pwm),
+                               static_cast<uint8_t>(msg.motors.motor1_pwm),
+                               static_cast<uint8_t>(msg.motors.motor2_pwm),
+                               static_cast<uint8_t>(msg.motors.motor3_pwm),
+                               static_cast<uint8_t>(msg.light.status),
+                               0x00,
+                               0x00,
+                               0x00};
 
     int msgSize = write(p_serial_port_->getSerialPort(), bf, 8);
     RCLCPP_INFO(this->get_logger(), "writing data");
